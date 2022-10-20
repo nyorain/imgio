@@ -97,13 +97,14 @@ std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Stream>&& stream,
 		ImageLoader loader;
 		bool tried {false};
 	} loaders[] = {
-		{{".png"}, &loadPng},
-		{{".jpg", ".jpeg"}, &loadJpeg},
+		// {{".png"}, &loadPng},
+		// {{".jpg", ".jpeg"}, &loadJpeg},
 		{{".ktx"}, &loadKtx},
 		{{".ktx2"}, &loadKtx2},
-		{{".exr"}, [](auto&& stream, auto& provider) {
-			return loadExr(std::move(stream), provider);
-		}}, {{".hdr", ".tga", ".bmp", ".psd", ".gif"}, &loadStb},
+		// {{".exr"}, [](auto&& stream, auto& provider) {
+		// 	return loadExr(std::move(stream), provider);
+		// }},
+		{{".hdr", ".tga", ".bmp", ".psd", ".gif"}, &loadStb},
 	};
 
 	// Try the one with matching extension

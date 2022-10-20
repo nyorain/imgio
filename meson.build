@@ -23,7 +23,10 @@ src = files(
 	'src/imgio/stream.cpp',
 	'src/imgio/file.cpp',
 	'src/imgio/image.cpp',
+	'src/imgio/ktx.cpp',
 	'src/imgio/ktx2.cpp',
+	'src/imgio/f16.cpp',
+	'src/imgio/format.cpp',
 )
 
 lib_imgio = library(
@@ -34,3 +37,9 @@ lib_imgio = library(
 	cpp_args: args,
 	install: true,
 )
+
+imgio_dep = declare_dependency(
+	include_directories: inc,
+	compile_args: [],
+	link_with: [lib_imgio],
+	dependencies: deps)
