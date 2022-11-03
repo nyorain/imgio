@@ -1,8 +1,10 @@
 #include <imgio/image.hpp>
 #include <imgio/stream.hpp>
-#include <webp/decode.h>
 #include <dlg/dlg.hpp>
+#include <nytl/scope.hpp>
 #include <vector>
+
+#include <webp/decode.h>
 
 namespace imgio {
 
@@ -30,13 +32,39 @@ public:
 	}
 
 	u64 read(nytl::Span<std::byte> data, unsigned mip, unsigned layer) const override {
-		WebPDecodeRGBAInto((const u8*) mmap_.data(), mmap_.mapSize(),
+		(void) mip;
+		(void) layer;
+		dlg_assert(data.size() >= 4 * width_ * height_);
+		auto res = WebPDecodeRGBAInto((const u8*) mmap_.data(), mmap_.mapSize(),
 			(u8*) data.data(), data.size(), 4 * width_);
+		dlg_assert(res);
 		return 4 * width_ * height_;
 	}
 };
 
 ReadError loadWebp(std::unique_ptr<Read>&& stream, WebpReader& reader) {
+	reader.mmap_ = ReadStreamMemoryMap(std::move(stream));
+
+	// Somewhat hacky: when reading fails, we don't take ownership of stream.
+	// But StreamMemoryMap already took the stream. When we return unsuccesfully,
+	// we have to return ownership. On success (see the end of the function),
+	// we simply unset this guard.
+	auto returnGuard = nytl::ScopeGuard([&]{
+		stream = reader.mmap_.release();
+	});
+
+	auto data = reader.mmap_.span();
+	int w, h;
+	auto res = WebPGetInfo(reinterpret_cast<const u8*>(data.data()), data.size(), &w, &h);
+	if(!res) {
+		return ReadError::invalidType;
+	}
+
+	reader.width_ = w;
+	reader.height_ = h;
+	returnGuard.unset();
+
+	return ReadError::none;
 }
 
 ReadError loadWebp(std::unique_ptr<Read>&& stream,

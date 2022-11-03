@@ -105,6 +105,7 @@ std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Read>&& stream,
 		// {{".jpg", ".jpeg"}, &loadJpeg},
 		{{".ktx"}, &loadKtx},
 		{{".ktx2"}, &loadKtx2},
+		{{".webp"}, &loadWebp},
 		{{".exr"}, [](auto&& stream, auto& provider) {
 			return loadExr(std::move(stream), provider);
 		}},

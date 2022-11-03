@@ -17,14 +17,19 @@ dep_dlg = dependency('dlg',
 dep_nytl = dependency('nytl',
 	fallback: ['nytl', 'nytl_dep'])
 
+# TODO: make all of them optional
 dep_png = dependency('libpng', fallback: ['png', 'png_dep'])
 dep_zlib = dependency('zlib', fallback: ['zlib', 'zlib_dep']) # for exr support
+dep_webp = dependency('libwebp')
+dep_turbojpeg = dependency('libturbojpeg')
 
 deps = [
 	dep_dlg,
 	dep_nytl,
 	dep_png,
 	dep_zlib,
+	dep_webp,
+	dep_turbojpeg,
 ]
 inc = include_directories('include')
 
@@ -63,6 +68,8 @@ src = files(
 	'src/imgio/ktx.cpp',
 	'src/imgio/ktx2.cpp',
 	'src/imgio/exr.cpp',
+	'src/imgio/webp.cpp',
+	'src/imgio/turbojpeg.cpp',
 	'src/imgio/f16.cpp',
 	'src/imgio/format.cpp',
 )

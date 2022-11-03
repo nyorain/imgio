@@ -115,10 +115,11 @@ enum class ReadError {
 /// They will move from the given stream only on success.
 ReadError loadKtx(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
 ReadError loadKtx2(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
-// ReadError loadJpeg(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&);
+ReadError loadJpeg(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
 ReadError loadPng(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
 ReadError loadExr(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&,
 	bool forceRGBA = true);
+ReadError loadWebp(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
 
 /// STB babckend is a fallback since it supports additional formats.
 ReadError loadStb(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
