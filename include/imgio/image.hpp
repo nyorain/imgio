@@ -113,15 +113,15 @@ enum class ReadError {
 /// Backend/Format-specific functions. Create image provider implementations
 /// into the given unique ptr on success. They expect binary streams.
 /// They will move from the given stream only on success.
-ReadError loadKtx(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&);
-ReadError loadKtx2(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&);
+ReadError loadKtx(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
+ReadError loadKtx2(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
 // ReadError loadJpeg(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&);
-// ReadError loadPng(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&);
-// ReadError loadExr(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&,
-// 	bool forceRGBA = true);
+ReadError loadPng(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
+ReadError loadExr(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&,
+	bool forceRGBA = true);
 
 /// STB babckend is a fallback since it supports additional formats.
-ReadError loadStb(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&);
+ReadError loadStb(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
 
 /// Tries to find the matching backend/loader for the image file at the
 /// given path. If no format/backend succeeds, the returned unique ptr will be
@@ -129,7 +129,7 @@ ReadError loadStb(std::unique_ptr<Stream>&&, std::unique_ptr<ImageProvider>&);
 /// 'ext' can contain a file extension (e.g. the full filename or just
 /// something like ".png") to give a hint about the file type. The loader
 /// will always try all image formats if the preferred one fails.
-std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Stream>&&, std::string_view ext = "");
+std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Read>&&, std::string_view ext = "");
 std::unique_ptr<ImageProvider> loadImage(StringParam filename);
 std::unique_ptr<ImageProvider> loadImage(FileHandle&& file);
 std::unique_ptr<ImageProvider> loadImage(span<const std::byte> data);
@@ -155,15 +155,20 @@ enum class WriteError {
 	internal,
 };
 
+WriteError writeKtx(Write& write, const ImageProvider&);
 WriteError writeKtx(StringParam path, const ImageProvider&);
 
 /// Can only write 2D rgb or rgba images.
 /// Will only write the first layer and mipmap.
 WriteError writePng(StringParam path, const ImageProvider&);
+WriteError writePng(Write& write, const ImageProvider&);
 
 // TODO: untested
 /// Can write 2D hdr images.
 WriteError writeExr(StringParam path, const ImageProvider&);
+
+WriteError writeKtx2(Write& write, const ImageProvider&, bool zlib = false);
+WriteError writeKtx2(StringParam path, const ImageProvider&, bool zlib = false);
 
 
 /// More limited in-memory representation of an image.
@@ -177,8 +182,8 @@ struct ImageData {
 /// and stores them in memory as Image. Does not catch exceptions
 /// from the ImageProvider.
 ImageData readImageData(const ImageProvider&, unsigned mip = 0, unsigned layer = 0);
-ImageData readImageData(std::unique_ptr<Stream>&& stream, unsigned mip = 0, unsigned layer = 0);
-ImageData readImageDataStb(std::unique_ptr<Stream>&& stream);
+ImageData readImageData(std::unique_ptr<Read>&& stream, unsigned mip = 0, unsigned layer = 0);
+ImageData readImageDataStb(std::unique_ptr<Read>&& stream);
 
 /// Transforms the given image into an image provider implementation.
 /// The provider will take ownership of the image.

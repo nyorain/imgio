@@ -12,26 +12,16 @@
 
 namespace imgio {
 
-// Simple abstract stream interface.
-// Mainly a way to abstract over data coming from a file or a memory
-// buffer.
-class Stream {
+class Seek {
 public:
-	enum class SeekOrigin {
+	enum class Origin {
 		set,
 		curr,
 		end,
 	};
 
 public:
-	virtual ~Stream() = default;
-
-	// Returns up to 'size' bytes into 'buf'.
-	// When less bytes are available, reads the maximum amount available.
-	// Always returns the number of bytes read, or a negative number
-	// on error. Advances the current read address by the number of
-	// read bytes.
-	virtual i64 readPartial(std::byte* buf, u64 size) = 0;
+	virtual ~Seek() = default;
 
 	// Changes the current read address.
 	// To be safe, the restriction from std::fseek apply.
@@ -39,10 +29,23 @@ public:
 	// - SeekOrigin::end is not supported on binary streams
 	// - for text streams, offset must be zero or (for SeekOrigin::set),
 	//   a value previously returned by tell.
-	virtual void seek(i64 offset, SeekOrigin seek = SeekOrigin::set) = 0;
+	virtual void seek(i64 offset, Seek::Origin seek = Seek::Origin::set) = 0;
 
 	// Returns the current absolute address in the stream.
 	virtual u64 address() const = 0;
+};
+
+// Simple abstract readable stream interface.
+// Mainly a way to abstract over data coming from a file or a memory
+// buffer.
+class Read : public Seek {
+public:
+	// Returns up to 'size' bytes into 'buf'.
+	// When less bytes are available, reads the maximum amount available.
+	// Always returns the number of bytes read, or a negative number
+	// on error. Advances the current read address by the number of
+	// read bytes.
+	virtual i64 readPartial(std::byte* buf, u64 size) = 0;
 
 	// Returns whether the stream is at the end.
 	// Calling seek on it will clear this if appropriate.
@@ -54,7 +57,7 @@ public:
 	virtual void read(std::byte* buf, u64 size) {
 		auto res = readPartial(buf, size);
 		if(res != i64(size)) {
-			throw std::out_of_range("Stream::read");
+			throw std::out_of_range("Read::read");
 		}
 	}
 
@@ -95,15 +98,37 @@ public:
 	}
 };
 
+class Write : public Seek {
+public:
+	// Returns the number of bytes written (or negative code for error)
+	virtual i64 writePartial(const std::byte* buf, u64 size) = 0;
+
+	virtual void write(const std::byte* buf, u64 size) {
+		auto res = writePartial(buf, size);
+		if(res != i64(size)) {
+			throw std::runtime_error("Write::write");
+		}
+	}
+
+	virtual void write(span<const std::byte> buf) {
+		write(buf.data(), buf.size());
+	}
+
+	template<typename T>
+	void write(const T& val) {
+		write(nytl::bytes(val));
+	}
+};
+
 const stbi_io_callbacks& streamStbiCallbacks();
 
-class FileStream : public Stream {
+class FileRead : public Read {
 public:
-	FileStream() = default;
-	FileStream(FileHandle&& file) : file_(std::move(file)) {}
+	FileRead() = default;
+	FileRead(FileHandle&& file) : file_(std::move(file)) {}
 
 	i64 readPartial(std::byte* buf, u64 size) override;
-	void seek(i64 offset, SeekOrigin so) override;
+	void seek(i64 offset, Seek::Origin so) override;
 	u64 address() const override;
 	bool eof() const override;
 
@@ -113,10 +138,25 @@ protected:
 	FileHandle file_;
 };
 
-class MemoryStream : public Stream {
+struct FileWrite : public Write {
 public:
-	MemoryStream() = default;
-	MemoryStream(span<const std::byte> buf) : buf_(buf) {}
+	FileWrite() = default;
+	FileWrite(FileHandle&& file) : file_(std::move(file)) {}
+
+	i64 writePartial(const std::byte*, u64 size) override;
+	void seek(i64 offset, Seek::Origin so) override;
+	u64 address() const override;
+
+	std::FILE* file() const { return file_.get(); }
+
+protected:
+	FileHandle file_;
+};
+
+class MemoryRead : public Read {
+public:
+	MemoryRead() = default;
+	MemoryRead(span<const std::byte> buf) : buf_(buf) {}
 
 	inline i64 readPartial(std::byte* buf, u64 size) override {
 		auto read = std::clamp(i64(buf_.size()) - i64(at_), i64(0), i64(size));
@@ -125,11 +165,11 @@ public:
 		return read;
 	}
 
-	inline void seek(i64 offset, SeekOrigin origin) override {
+	inline void seek(i64 offset, Seek::Origin origin) override {
 		switch(origin) {
-			case SeekOrigin::set: at_ = offset; break;
-			case SeekOrigin::curr: at_ += offset; break;
-			case SeekOrigin::end: at_ = buf_.size() + offset; break;
+			case Seek::Origin::set: at_ = offset; break;
+			case Seek::Origin::curr: at_ += offset; break;
+			case Seek::Origin::end: at_ = buf_.size() + offset; break;
 			default: throw std::logic_error("Invalid Stream::SeekOrigin");
 		}
 	}
@@ -148,21 +188,21 @@ protected:
 // This is done as efficiently as possible: if the stream is a memory
 // stream, simply returns the arleady in-memory buffer. Otherwise,
 // if the stream comes a file, tries to memory map it.
-class StreamMemoryMap {
+class ReadStreamMemoryMap {
 public:
-	StreamMemoryMap() = default;
+	ReadStreamMemoryMap() = default;
 
 	// The MemoryMap takes ownership of the stream only if no
 	// exception is thrown.
 	// It can be released later on using 'release'
 	// - failOnCopy: When the stream can't be mapped directly into memory,
 	//   will not take ownership of the stream and also not copy the data.
-	explicit StreamMemoryMap(std::unique_ptr<Stream>&& source,
+	explicit ReadStreamMemoryMap(std::unique_ptr<Read>&& source,
 		bool failOnCopy = false);
-	~StreamMemoryMap();
+	~ReadStreamMemoryMap();
 
-	StreamMemoryMap(StreamMemoryMap&& rhs) { swap(*this, rhs); }
-	StreamMemoryMap& operator=(StreamMemoryMap rhs) {
+	ReadStreamMemoryMap(ReadStreamMemoryMap&& rhs) { swap(*this, rhs); }
+	ReadStreamMemoryMap& operator=(ReadStreamMemoryMap rhs) {
 		swap(*this, rhs);
 		return *this;
 	}
@@ -176,9 +216,9 @@ public:
 	const std::byte* end() const { return data() + size(); }
 
 	// Destroys the memory map and returns the stream.
-	std::unique_ptr<Stream> release();
+	std::unique_ptr<Read> release();
 
-	friend void swap(StreamMemoryMap& a, StreamMemoryMap& b);
+	friend void swap(ReadStreamMemoryMap& a, ReadStreamMemoryMap& b);
 
 private:
 	bool mmapped_ {};
@@ -186,7 +226,7 @@ private:
 	std::size_t size_ {};
 	std::size_t mapSize_ {};
 	std::unique_ptr<std::byte[]> owned_;
-	std::unique_ptr<Stream> stream_;
+	std::unique_ptr<Read> stream_;
 };
 
 } // namespace imgio

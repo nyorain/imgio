@@ -3,11 +3,12 @@
 #include <imgio/fwd.hpp>
 #include <nytl/vec.hpp>
 #include <nytl/span.hpp>
+#include <nytl/flags.hpp>
 
 namespace imgio {
 
-// Like VkFormat but we don't want a direct dependency on vulkan for now
-enum class Format {
+// Like VkFormat but we don't want a public dependency on vulkan for now
+enum class Format : u32 {
 	undefined = 0,
 	r4g4UnormPack8 = 1,
 	r4g4b4a4UnormPack16 = 2,
@@ -287,15 +288,39 @@ enum class Format {
 	a4b4g4r4UnormPack16EXT = 1000340001
 };
 
-std::size_t formatElementSize(Format);
+// Like VkImageAspectFlagBits but we don't want a direct dependency on vulkan for now
+enum class FormatAspect : u32 {
+    color = 0x00000001,
+    depth = 0x00000002,
+    stencil = 0x00000004,
+    metadata = 0x00000008,
+    plane0 = 0x00000010,
+    plane1 = 0x00000020,
+    plane2 = 0x00000040,
+};
+
+NYTL_FLAG_OPS(FormatAspect)
+
+u32 formatElementSize(Format);
+u32 formatElementSize(Format, FormatAspect);
 Vec3ui blockSize(Format);
 bool isSRGB(Format);
 Format toggleSRGB(Format format);
 
-// NOTE: rgb must be linear
+// Returns the number of bytes needed to store an single face/layer
+// of an image with the given size and format, in the mip level.
+// 'size' is the size of the full image (level 0), not the size of the
+// mip subresource.
+u64 sizeBytes(Vec3ui size, u32 mip, Format fmt);
+
+// NOTE: rgb should be in linear space
 u32 e5b9g9r9FromRgb(Vec3f rgb);
 Vec3f e5b9g9r9ToRgb(u32 e5r9g9b9);
 
+// Limitations of format I/O:
+// - No multiple formats
+// - No block-compressed formats
+// - No support for Format::b10g11r11UfloatPack32
 Vec4d read(Format srcFormat, span<const std::byte>& src);
 void write(Format dstFormat, span<std::byte>& dst, const Vec4d& color);
 void convert(Format dstFormat, span<std::byte>& dst,
@@ -312,7 +337,7 @@ Vec4d srgbToLinear(Vec4d);
 /// Returns the number of mipmap levels needed for a full mipmap
 /// chain for an image with the given extent.
 [[nodiscard]] unsigned numMipLevels(const Vec2ui& extent);
-[[nodiscard]] unsigned numMipLevels(const Vec2ui& extent);
+[[nodiscard]] unsigned numMipLevels(const Vec3ui& extent);
 
 /// Returns the size of an image with given size at the given mip level.
 /// Returns {1, 1, 1} if the mip level does not exist (i.e. too high).

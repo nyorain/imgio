@@ -1,5 +1,7 @@
 // #include <iro/config.hpp>
-#define IMGIO_LINUX
+#ifndef _WIN32
+  #define IMGIO_LINUX
+#endif // _WIN32
 
 #include <imgio/stream.hpp>
 #include <imgio/allocation.hpp>
@@ -19,25 +21,25 @@ namespace imgio {
 namespace {
 
 int streamStbiRead(void *user, char *data, int size) {
-	auto stream = static_cast<Stream*>(user);
+	auto stream = static_cast<Read*>(user);
 	return stream->readPartial(reinterpret_cast<std::byte*>(data), size);
 }
 
 void streamStbiSkip(void *user, int n) {
-	auto stream = static_cast<Stream*>(user);
-	stream->seek(n, Stream::SeekOrigin::curr);
+	auto stream = static_cast<Read*>(user);
+	stream->seek(n, Seek::Origin::curr);
 }
 
 int streamStbiEof(void *user) {
-	auto stream = static_cast<Stream*>(user);
+	auto stream = static_cast<Read*>(user);
 	return stream->eof();
 }
 
-int cSeekOrigin(Stream::SeekOrigin origin) {
+int cSeekOrigin(Seek::Origin origin) {
 	switch(origin) {
-		case Stream::SeekOrigin::set: return SEEK_SET;
-		case Stream::SeekOrigin::curr: return SEEK_CUR;
-		case Stream::SeekOrigin::end: return SEEK_END;
+		case Seek::Origin::set: return SEEK_SET;
+		case Seek::Origin::curr: return SEEK_CUR;
+		case Seek::Origin::end: return SEEK_END;
 		default: throw std::logic_error("Invalid Stream::SeekOrigin");
 	}
 }
@@ -54,11 +56,12 @@ const stbi_io_callbacks& streamStbiCallbacks() {
 	return impl;
 }
 
-i64 FileStream::readPartial(std::byte* buf, u64 size) {
+// FileRead
+i64 FileRead::readPartial(std::byte* buf, u64 size) {
 	return std::fread(buf, 1u, size, file_);
 }
 
-void FileStream::seek(i64 offset, SeekOrigin so) {
+void FileRead::seek(i64 offset, Seek::Origin so) {
 	auto res = std::fseek(file_, offset, cSeekOrigin(so));
 	if(res != 0) {
 		dlg_error("fseek: {} ({})", res, std::strerror(errno));
@@ -66,7 +69,7 @@ void FileStream::seek(i64 offset, SeekOrigin so) {
 	}
 }
 
-u64 FileStream::address() const {
+u64 FileRead::address() const {
 	auto res = std::ftell(file_);
 	if(res < 0) {
 		dlg_error("ftell: {} ({})", res, std::strerror(errno));
@@ -76,12 +79,35 @@ u64 FileStream::address() const {
 	return u32(res);
 }
 
-bool FileStream::eof() const {
+bool FileRead::eof() const {
 	return std::feof(file_);
 }
 
+// FileWrite
+i64 FileWrite::writePartial(const std::byte* data, u64 size) {
+	return std::fwrite(data, 1u, size, file_);
+}
+
+void FileWrite::seek(i64 offset, Seek::Origin so) {
+	auto res = std::fseek(file_, offset, cSeekOrigin(so));
+	if(res != 0) {
+		dlg_error("fseek: {} ({})", res, std::strerror(errno));
+		throw std::runtime_error("FileStream::fseek failed");
+	}
+}
+
+u64 FileWrite::address() const {
+	auto res = std::ftell(file_);
+	if(res < 0) {
+		dlg_error("ftell: {} ({})", res, std::strerror(errno));
+		throw std::runtime_error("FileStream::ftell failed");
+	}
+
+	return u32(res);
+}
+
 // StreamMemoryMap
-StreamMemoryMap::StreamMemoryMap(std::unique_ptr<Stream>&& stream,
+ReadStreamMemoryMap::ReadStreamMemoryMap(std::unique_ptr<Read>&& stream,
 		bool failOnCopy) {
 	dlg_assert(stream.get());
 
@@ -131,7 +157,7 @@ StreamMemoryMap::StreamMemoryMap(std::unique_ptr<Stream>&& stream,
 	// otherwise fall back to default solution
 #endif // TKN_LINUX
 
-	if(auto mstream = dynamic_cast<MemoryStream*>(stream.get()); mstream) {
+	if(auto mstream = dynamic_cast<MemoryRead*>(stream.get()); mstream) {
 		data_ = mstream->buffer().data();
 		size_ = mstream->buffer().size();
 		mapSize_ = size_;
@@ -144,7 +170,7 @@ StreamMemoryMap::StreamMemoryMap(std::unique_ptr<Stream>&& stream,
 	}
 
 	// fall back to just reading the whole stream.
-	stream->seek(0, Stream::SeekOrigin::end);
+	stream->seek(0, Seek::Origin::end);
 	size_ = stream->address();
 	stream->seek(0);
 	owned_ = std::make_unique<std::byte[]>(size_);
@@ -155,11 +181,11 @@ StreamMemoryMap::StreamMemoryMap(std::unique_ptr<Stream>&& stream,
 	mapSize_ = size_;
 }
 
-StreamMemoryMap::~StreamMemoryMap() {
+ReadStreamMemoryMap::~ReadStreamMemoryMap() {
 	release();
 }
 
-std::unique_ptr<Stream> StreamMemoryMap::release() {
+std::unique_ptr<Read> ReadStreamMemoryMap::release() {
 #ifdef TKN_LINUX
 	if(mmapped_ && data_) {
 		::munmap(const_cast<std::byte*>(data_), size_);
@@ -175,7 +201,7 @@ std::unique_ptr<Stream> StreamMemoryMap::release() {
 	return std::move(stream_);
 }
 
-void swap(StreamMemoryMap& a, StreamMemoryMap& b) {
+void swap(ReadStreamMemoryMap& a, ReadStreamMemoryMap& b) {
 	using std::swap;
 	swap(a.owned_, b.owned_);
 	swap(a.data_, b.data_);

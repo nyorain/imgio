@@ -29,11 +29,15 @@ void* stbiRealloc(void* old, std::size_t newSize) {
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC // needed, otherwise we mess with other usages
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
+#ifdef __GNUC__
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wunused-function"
+	#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif // __GNUC__
 #include "stb_image.h"
-#pragma GCC diagnostic pop
+#ifdef __GNUC__
+	#pragma GCC diagnostic pop
+#endif // __GNUC__
 
 namespace imgio {
 
@@ -76,7 +80,7 @@ inline bool hasSuffixCI(std::string_view cstr, std::string_view csuffix) {
 }
 
 // ImageProvider api
-ReadError loadStb(std::unique_ptr<Stream>&& stream,
+ReadError loadStb(std::unique_ptr<Read>&& stream,
 		std::unique_ptr<ImageProvider>& provider) {
 	auto img = readImageDataStb(std::move(stream));
 	if(!img.data) {
@@ -87,9 +91,9 @@ ReadError loadStb(std::unique_ptr<Stream>&& stream,
 	return ReadError::none;
 }
 
-std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Stream>&& stream,
+std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Read>&& stream,
 		std::string_view ext) {
-	using ImageLoader = ReadError(*)(std::unique_ptr<Stream>&& stream,
+	using ImageLoader = ReadError(*)(std::unique_ptr<Read>&& stream,
 		std::unique_ptr<ImageProvider>&);
 
 	struct {
@@ -97,13 +101,13 @@ std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Stream>&& stream,
 		ImageLoader loader;
 		bool tried {false};
 	} loaders[] = {
-		// {{".png"}, &loadPng},
+		{{".png"}, &loadPng},
 		// {{".jpg", ".jpeg"}, &loadJpeg},
 		{{".ktx"}, &loadKtx},
 		{{".ktx2"}, &loadKtx2},
-		// {{".exr"}, [](auto&& stream, auto& provider) {
-		// 	return loadExr(std::move(stream), provider);
-		// }},
+		{{".exr"}, [](auto&& stream, auto& provider) {
+			return loadExr(std::move(stream), provider);
+		}},
 		{{".hdr", ".tga", ".bmp", ".psd", ".gif"}, &loadStb},
 	};
 
@@ -142,7 +146,7 @@ std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Stream>&& stream,
 			continue;
 		}
 
-		stream->seek(0, Stream::SeekOrigin::set); // reset stream
+		stream->seek(0, Seek::Origin::set); // reset stream
 		auto res = loader.loader(std::move(stream), reader);
 		if(res == ReadError::none) {
 			dlg_assert(reader);
@@ -160,19 +164,19 @@ std::unique_ptr<ImageProvider> loadImage(StringParam path) {
 		return {};
 	}
 
-	return loadImage(std::make_unique<FileStream>(std::move(file)), path);
+	return loadImage(std::make_unique<FileRead>(std::move(file)), path);
 }
 
 std::unique_ptr<ImageProvider> loadImage(FileHandle&& file) {
-	return loadImage(std::make_unique<FileStream>(std::move(file)));
+	return loadImage(std::make_unique<FileRead>(std::move(file)));
 }
 
 std::unique_ptr<ImageProvider> loadImage(span<const std::byte> data) {
-	return loadImage(std::make_unique<MemoryStream>(data));
+	return loadImage(std::make_unique<MemoryRead>(data));
 }
 
 // Image api
-ImageData readImageDataStb(std::unique_ptr<Stream>&& stream) {
+ImageData readImageDataStb(std::unique_ptr<Read>&& stream) {
 	constexpr auto channels = 4u; // TODO: make configurable
 	int width, height, ch;
 	std::byte* data;
@@ -180,7 +184,7 @@ ImageData readImageDataStb(std::unique_ptr<Stream>&& stream) {
 
 	auto& cb = streamStbiCallbacks();
 	bool hdr = stbi_is_hdr_from_callbacks(&cb, stream.get());
-	stream->seek(0u, Stream::SeekOrigin::set);
+	stream->seek(0u, Seek::Origin::set);
 
 	if(hdr) {
 		auto fd = stbi_loadf_from_callbacks(&cb, stream.get(), &width, &height, &ch, channels);
@@ -230,7 +234,7 @@ ImageData readImageData(const ImageProvider& provider, unsigned mip, unsigned la
 	return ret;
 }
 
-ImageData readImageData(std::unique_ptr<Stream>&& stream, unsigned mip, unsigned layer) {
+ImageData readImageData(std::unique_ptr<Read>&& stream, unsigned mip, unsigned layer) {
 	auto provider = loadImage(std::move(stream));
 	return provider ? readImageData(*provider, mip, layer) : ImageData {};
 }
@@ -251,10 +255,7 @@ public:
 
 public:
 	u64 faceSize(unsigned mip) const {
-		auto w = std::max(size_.x >> mip, 1u);
-		auto h = std::max(size_.y >> mip, 1u);
-		auto d = std::max(size_.z >> mip, 1u);
-		return w * h * d * formatElementSize(format_);
+		return sizeBytes(size_, mip, format_);
 	}
 
 	unsigned layers() const noexcept override { return layers_; }
@@ -349,13 +350,12 @@ std::unique_ptr<ImageProvider> wrapImage(Vec3ui size, Format format,
 	ret->cubemap_ = cubemap;
 	ret->data_.reserve(mips * layers);
 
-	auto fmtSize = formatElementSize(format);
+	auto off = 0u;
 	for(auto m = 0u; m < mips; ++m) {
 		for(auto l = 0u; l < layers; ++l) {
 			auto& rdi = ret->data_.emplace_back();
-			auto off = fmtSize * tightTexelNumber(
-				{size.x, size.y, size.z}, layers, m, l);
 			rdi.ref = data.get() + off;
+			off += sizeBytes(size, m, format);
 		}
 	}
 
@@ -379,13 +379,12 @@ std::unique_ptr<ImageProvider> wrapImage(Vec3ui size, Format format,
 	ret->cubemap_ = cubemap;
 	ret->data_.reserve(mips * layers);
 
-	auto fmtSize = formatElementSize(format);
+	auto off = 0u;
 	for(auto m = 0u; m < mips; ++m) {
 		for(auto l = 0u; l < layers; ++l) {
 			auto& rdi = ret->data_.emplace_back();
-			auto off = fmtSize * tightTexelNumber(
-				{size.x, size.y, size.z}, layers, m, l);
 			rdi.ref = data.data() + off;
+			off += sizeBytes(size, m, format);
 		}
 	}
 

@@ -28,9 +28,9 @@ f16::f16(float val) {
 			exp = 0;
 		} else if(iexp < -14) { // can represent as denorm
 			exp = 0;
-			mantissa = std::exp2(24 + iexp) + (fmantissa >> (-iexp - 1));
+			mantissa = u16(std::exp2(24 + iexp) + (fmantissa >> (-iexp - 1)));
 		} else if(iexp <= 15) { // normal f16
-			exp = iexp + 15;
+			exp = u16(iexp + 15);
 			mantissa = fmantissa >> 13;
 		} else { // can't represent that high exponent; inifinity
 			exp = 31;

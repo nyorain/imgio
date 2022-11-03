@@ -116,21 +116,13 @@ public:
 	u32 faces_;
 	u32 arrayElements_; // 0 for non array textures
 	u64 dataBegin_;
-	mutable std::unique_ptr<Stream> stream_;
+	mutable std::unique_ptr<Read> stream_;
 	mutable std::vector<std::byte> tmpData_;
-	// mutable VulkanStreamImport import_; // when importing the mapped memory
 
 public:
 	// Returns the size for a single layer/face in the given mip level
 	u64 faceSize(unsigned mip) const {
-		auto w = std::max(size_.x >> mip, 1u);
-		auto h = std::max(size_.y >> mip, 1u);
-		auto d = std::max(size_.z >> mip, 1u);
-		auto [bx, by, bz] = blockSize(format_);
-		w = ceilDivide(w, bx);
-		h = ceilDivide(h, by);
-		d = ceilDivide(d, bz);
-		return w * h * d * formatElementSize(format_);
+		return sizeBytes(size_, mip, format_);
 	}
 
 	Vec3ui size() const noexcept override { return size_; }
@@ -169,13 +161,14 @@ public:
 		for(auto i = 0u; i < mip; ++i) {
 			auto faceSize = this->faceSize(i);
 			auto mipSize = layers() * align(faceSize, 4u);
-			[[maybe_unused]] auto expectedImageSize = mipSize;
+
+#ifdef IMGIO_DEBUG
+			auto expectedImageSize = mipSize;
 			if(arrayElements_ == 0 && faces_ == 6) {
 				// ktx special cubemap imageSize case
 				expectedImageSize = faceSize;
 			}
 
-#ifdef IMGIO_DEBUG
 			// debug imageSize reading
 			stream_->seek(address);
 			stream_->read(imageSize);
@@ -197,13 +190,13 @@ public:
 		auto byteSize = this->faceSize(mip);
 		auto faceSize = align(byteSize, 4u);
 
-		[[maybe_unused]] auto mipSize = layers() * faceSize;
+#ifdef IMGIO_DEBUG
+		auto mipSize = layers() * faceSize;
 		if(arrayElements_ == 0 && faces_ == 6) {
 			// ktx special case: imageSize only size of one face
 			mipSize = byteSize;
 		}
 
-#ifdef IMGIO_DEBUG
 		// debug imageSize reading
 		stream_->seek(address);
 		stream_->read(imageSize);
@@ -264,7 +257,7 @@ std::ostream& operator<<(std::ostream& os, const KtxHeader& header) {
 	return os;
 }
 
-ReadError loadKtx(std::unique_ptr<Stream>&& stream, KtxReader& reader) {
+ReadError loadKtx(std::unique_ptr<Read>&& stream, KtxReader& reader) {
 	std::array<u8, 12> identifier;
 	if(!stream->readPartial(identifier)) {
 		dlg_debug("KTX can't read identifier");
@@ -374,7 +367,7 @@ ReadError loadKtx(std::unique_ptr<Stream>&& stream, KtxReader& reader) {
 	return ReadError::none;
 }
 
-ReadError loadKtx(std::unique_ptr<Stream>&& stream,
+ReadError loadKtx(std::unique_ptr<Read>&& stream,
 		std::unique_ptr<ImageProvider>& ret) {
 	auto reader = std::make_unique<KtxReader>();
 	auto res = loadKtx(std::move(stream), *reader);
@@ -386,21 +379,8 @@ ReadError loadKtx(std::unique_ptr<Stream>&& stream,
 }
 
 // save
-WriteError writeKtx(StringParam path, const ImageProvider& image) {
-	auto file = std::fopen(path.c_str(), "wb");
-	if(!file) {
-		dlg_debug("fopen: {}", std::strerror(errno));
-		return WriteError::cantOpen;
-	}
-
-	auto fileGuard = ScopeGuard([&]{ std::fclose(file); });
-#define write(data, size)\
-	if(std::fwrite(data, size, 1, file) < 1) { \
-		dlg_debug("fwrite failed"); \
-		return WriteError::cantWrite; \
-	}
-
-	write(ktxIdentifier.data(), ktxIdentifier.size());
+WriteError writeKtxThrow(Write& write, const ImageProvider& image) {
+	write.write(ktxIdentifier);
 
 	auto fmt = image.format();
 	auto size = image.size();
@@ -448,9 +428,10 @@ WriteError writeKtx(StringParam path, const ImageProvider& image) {
 		header.glFormat = 0u;
 	}
 
-	write(&header, sizeof(header));
-	u8 zeroBytes[4] = {0, 0, 0, 0};
+	write.write(header);
+	const std::byte zeroBytes[4] {};
 
+	auto off = sizeof(ktxIdentifier) + sizeof(header);
 	for(auto m = 0u; m < mips; ++m) {
 		// image size
 		Vec3ui msize;
@@ -461,12 +442,14 @@ WriteError writeKtx(StringParam path, const ImageProvider& image) {
 
 		// ktx exception: for this condition imagesize should only
 		// contain the size of *one face* instead of everything.
+		u32 metaSize = 0u;
 		if(header.numberArrayElements == 0 && image.cubemap()) {
-			write(&faceSize, sizeof(faceSize));
+			metaSize = faceSize;
 		} else {
-			u32 fullSize = align(faceSize, 4u) * layers * faces;
-			write(&fullSize, sizeof(fullSize));
+			metaSize = align(faceSize, 4u) * layers * faces;
 		}
+		write.write(metaSize);
+		off += sizeof(u32);
 
 		for(auto l = 0u; l < layers; ++l) {
 			for(auto f = 0u; f < faces; ++f) {
@@ -477,30 +460,47 @@ WriteError writeKtx(StringParam path, const ImageProvider& image) {
 					return WriteError::readError;
 				}
 
-				write(span.data(), u64(span.size()));
+				write.write(span);
+				off += span.size();
 
 				// padding, align to 4
-				auto off = std::ftell(file);
-				dlg_assert(off > 0);
 				u32 padding = align(off, 4u) - off;
 				if(padding > 0) {
-					write(zeroBytes, padding);
+					write.write(zeroBytes, padding);
+					off += padding;
 				}
 			}
 		}
 
 		// padding, align to 4
-		auto off = std::ftell(file);
-		dlg_assert(off > 0);
 		u32 padding = align(off, 4u) - off;
 		if(padding > 0) {
-			write(zeroBytes, padding);
+			write.write(zeroBytes, padding);
+			off += padding;
 		}
 	}
 
-#undef write
-
 	return WriteError::none;
+}
+
+WriteError writeKtx(Write& write, const ImageProvider& img) {
+	try {
+		return writeKtxThrow(write, img);
+	} catch(const std::runtime_error& err) {
+		dlg_error("writeKtx: {}", err.what());
+		return WriteError::cantWrite;
+	}
+}
+
+WriteError writeKtx(StringParam path, const ImageProvider& image) {
+	auto file = FileHandle(path, "wb");
+	if(!file) {
+		dlg_debug("fopen: {}", std::strerror(errno));
+		return WriteError::cantOpen;
+	}
+
+	FileWrite writer(std::move(file));
+	return writeKtx(writer, image);
 }
 
 } // namespace
