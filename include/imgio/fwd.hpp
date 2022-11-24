@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace nytl {};
+namespace nytl {}
 
 namespace imgio {
 
