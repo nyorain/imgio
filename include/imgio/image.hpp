@@ -2,6 +2,7 @@
 
 #include <imgio/fwd.hpp>
 #include <imgio/format.hpp>
+#include <imgio/config.hpp>
 #include <nytl/span.hpp>
 #include <nytl/stringParam.hpp>
 #include <nytl/vec.hpp>
@@ -115,11 +116,23 @@ enum class ReadError {
 /// They will move from the given stream only on success.
 ReadError loadKtx(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
 ReadError loadKtx2(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
+
+#ifdef IMGIO_WITH_TURBOJPEG
 ReadError loadJpeg(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
+#endif // IMGIO_WITH_TURBOJPEG
+
+#ifdef IMGIO_WITH_PNG
 ReadError loadPng(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
+#endif // IMGIO_WITH_PNG
+
+#ifdef IMGIO_WITH_EXR
 ReadError loadExr(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&,
 	bool forceRGBA = true);
+#endif // IMGIO_WITH_EXR
+
+#ifdef IMGIO_WITH_TURBOJPEG
 ReadError loadWebp(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
+#endif // IMGIO_WITH_TURBOJPEG
 
 /// STB babckend is a fallback since it supports additional formats.
 ReadError loadStb(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
@@ -159,17 +172,21 @@ enum class WriteError {
 WriteError writeKtx(Write& write, const ImageProvider&);
 WriteError writeKtx(StringParam path, const ImageProvider&);
 
+WriteError writeKtx2(Write& write, const ImageProvider&, bool zlib = false);
+WriteError writeKtx2(StringParam path, const ImageProvider&, bool zlib = false);
+
 /// Can only write 2D rgb or rgba images.
 /// Will only write the first layer and mipmap.
+#ifdef IMGIO_WITH_PNG
 WriteError writePng(StringParam path, const ImageProvider&);
 WriteError writePng(Write& write, const ImageProvider&);
+#endif // IMGIO_WITH_PNG
 
 // TODO: untested
 /// Can write 2D hdr images.
+#ifdef IMGIO_WITH_EXR
 WriteError writeExr(StringParam path, const ImageProvider&);
-
-WriteError writeKtx2(Write& write, const ImageProvider&, bool zlib = false);
-WriteError writeKtx2(StringParam path, const ImageProvider&, bool zlib = false);
+#endif // IMGIO_WITH_EXR
 
 
 /// More limited in-memory representation of an image.

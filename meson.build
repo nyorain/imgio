@@ -17,19 +17,28 @@ dep_dlg = dependency('dlg',
 dep_nytl = dependency('nytl',
 	fallback: ['nytl', 'nytl_dep'])
 
-# TODO: make all of them optional
-dep_png = dependency('libpng', fallback: ['png', 'png_dep'])
-dep_zlib = dependency('zlib', fallback: ['zlib', 'zlib_dep']) # for exr support
-dep_webp = dependency('libwebp')
-dep_turbojpeg = dependency('libturbojpeg')
+# required for exr, ktx compression support
+dep_zlib = dependency('zlib', fallback: ['zlib', 'zlib_dep'])
+dep_png = dependency('libpng', fallback: ['png', 'png_dep'], required: false)
+
+dep_turbojpeg = dependency('libturbojpeg', required: false)
+dep_webp = dependency('libwebp', required: false)
+
+# todo: make option
+with_exr = true
+
+cd = configuration_data()
+cd.set('IMGIO_LINUX', build_machine.system() == 'linux')
+cd.set('IMGIO_WITH_LIBPNG', dep_png.found())
+cd.set('IMGIO_WITH_TURBOJPEG', dep_turbojpeg.found())
+cd.set('IMGIO_WITH_WEBP', dep_webp.found())
+cd.set('IMGIO_WITH_EXR', with_exr)
+subdir('include/imgio')
 
 deps = [
 	dep_dlg,
 	dep_nytl,
-	dep_png,
 	dep_zlib,
-	dep_webp,
-	dep_turbojpeg,
 ]
 inc = include_directories('include')
 
@@ -64,15 +73,34 @@ src = files(
 	'src/imgio/stream.cpp',
 	'src/imgio/file.cpp',
 	'src/imgio/image.cpp',
-	'src/imgio/png.cpp',
 	'src/imgio/ktx.cpp',
 	'src/imgio/ktx2.cpp',
-	'src/imgio/exr.cpp',
-	'src/imgio/webp.cpp',
-	'src/imgio/turbojpeg.cpp',
 	'src/imgio/f16.cpp',
 	'src/imgio/format.cpp',
 )
+
+# libpng
+if dep_png.found()
+	src += files('src/imgio/png.cpp')
+	deps += [dep_png]
+endif
+
+# exr
+if with_exr
+	src += files('src/imgio/exr.cpp')
+endif
+
+# webp
+if dep_webp.found()
+	src += files('src/imgio/webp.cpp')
+	deps += [dep_webp]
+endif
+
+# turbojpeg
+if dep_turbojpeg.found()
+	src += files('src/imgio/turbojpeg.cpp')
+	deps += [dep_turbojpeg]
+endif
 
 lib_imgio = library(
 	'imgio',

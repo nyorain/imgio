@@ -101,14 +101,22 @@ std::unique_ptr<ImageProvider> loadImage(std::unique_ptr<Read>&& stream,
 		ImageLoader loader;
 		bool tried {false};
 	} loaders[] = {
-		{{".png"}, &loadPng},
-		// {{".jpg", ".jpeg"}, &loadJpeg},
 		{{".ktx"}, &loadKtx},
 		{{".ktx2"}, &loadKtx2},
+#ifdef IMGIO_WITH_PNG
+		{{".png"}, &loadPng},
+#endif // IMGIO_WITH_PNG
+#ifdef IMGIO_WITH_TURBOJPEG
+		{{".jpg", ".jpeg"}, &loadJpeg},
+#endif // IMGIO_WITH_TURBOJPEG
+#ifdef IMGIO_WITH_WEBP
 		{{".webp"}, &loadWebp},
+#endif // IMGIO_WITH_WEBP
+#ifdef IMGIO_WITH_EXR
 		{{".exr"}, [](auto&& stream, auto& provider) {
 			return loadExr(std::move(stream), provider);
 		}},
+#endif // IMGIO_WITH_EXR
 		{{".hdr", ".tga", ".bmp", ".psd", ".gif"}, &loadStb},
 	};
 

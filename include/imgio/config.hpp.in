@@ -1,0 +1,6 @@
+#mesondefine IMGIO_LINUX
+#mesondefine IMGIO_WITH_LIBPNG
+#mesondefine IMGIO_WITH_TURBOJPEG
+#mesondefine IMGIO_WITH_WEBP
+#mesondefine IMGIO_WITH_EXR
+
