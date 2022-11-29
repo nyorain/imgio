@@ -65,6 +65,9 @@ common_args = [
 	'/wd4244', # lossy type conversion (e.g. double -> int)
 	'/wd4267', # lossy type conversion (e.g. size -> unsigned int)
 	'/wd4305', # truncating type conversion (e.g. double -> float)
+	'/wd4127', # conditional expression is constant (might be useful but not really for us)
+	'/wd4245', # signed/unsigned warning, way too strict.
+	'/wd4201', # nameless struct/union
 ]
 
 common_args = cc.get_supported_arguments(common_args)
