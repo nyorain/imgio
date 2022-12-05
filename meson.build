@@ -11,6 +11,8 @@ project('imgio', ['c', 'cpp'],
 cc = meson.get_compiler('cpp')
 source_root = '/'.join(meson.source_root().split('\\'))
 
+opt_png = get_option('png')
+
 dep_dlg = dependency('dlg',
 	static: true,
 	fallback: ['dlg', 'dlg_dep'])
@@ -18,8 +20,18 @@ dep_nytl = dependency('nytl',
 	fallback: ['nytl', 'nytl_dep'])
 
 # required for exr, ktx compression support
-dep_zlib = dependency('zlib', fallback: ['zlib', 'zlib_dep'])
-dep_png = dependency('libpng', fallback: ['png', 'png_dep'], required: false)
+dep_zlib = dependency('zlib',
+	fallback: ['zlib', 'zlib_dep'],
+	default_options: ['werror=false'],
+)
+
+dep_png = disabler()
+if opt_png
+	dep_png = dependency('libpng',
+	fallback: ['png', 'png_dep'],
+	default_options: ['werror=false'],
+	required: false)
+endif
 
 dep_turbojpeg = dependency('libturbojpeg', required: false)
 dep_webp = dependency('libwebp', required: false)
