@@ -381,5 +381,4 @@ Vec4d srgbToLinear(Vec4d);
 	return z * (extent.y * extent.x) + y * extent.x + x;
 }
 
-
 } // namespace
