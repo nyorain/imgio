@@ -23,8 +23,16 @@ namespace fs = std::filesystem;
 template<typename C>
 C readFile(StringParam path, bool binary = true);
 
+extern template std::vector<u32> readFile<std::vector<u32>>(StringParam, bool);
+extern template std::vector<std::byte> readFile<std::vector<std::byte>>(StringParam, bool);
+extern template std::string readFile<std::string>(StringParam, bool);
+
 template<typename C>
 C readPath(const fs::path& path, bool binary = true);
+
+extern template std::vector<u32> readPath<std::vector<u32>>(const fs::path&, bool);
+extern template std::vector<std::byte> readPath<std::vector<std::byte>>(const fs::path&, bool);
+extern template std::string readPath<std::string>(const fs::path&, bool);
 
 /// Writes the given buffer into the file at the given path.
 /// binary: Specifies whether the file should be written in binary mode.

@@ -68,9 +68,6 @@ common_args = [
 
 	'-DDLG_BASE_PATH="@0@/"'.format(source_root),
 
-	# Highly useful for debugging on linux.
-	'-D_GLIBCXX_DEBUG',
-
 	# msvc
 	'-D_CRT_SECURE_NO_WARNINGS',
 	'/wd26812', # prefer 'enum class' over 'enum'. Warning isn't wrong but can't change external code
@@ -81,6 +78,11 @@ common_args = [
 	'/wd4245', # signed/unsigned warning, way too strict.
 	'/wd4201', # nameless struct/union
 ]
+
+if get_option('buildtype') == 'debug'
+	# highly useful for debugging but has impact on performance
+	common_args += '-D_GLIBCXX_DEBUG'
+endif
 
 common_args = cc.get_supported_arguments(common_args)
 
