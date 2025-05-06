@@ -130,9 +130,9 @@ ReadError loadExr(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&,
 	bool forceRGBA = true);
 #endif // IMGIO_WITH_EXR
 
-#ifdef IMGIO_WITH_TURBOJPEG
+#ifdef IMGIO_WITH_WEBP
 ReadError loadWebp(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
-#endif // IMGIO_WITH_TURBOJPEG
+#endif // IMGIO_WITH_WEBP
 
 /// STB babckend is a fallback since it supports additional formats.
 ReadError loadStb(std::unique_ptr<Read>&&, std::unique_ptr<ImageProvider>&);
