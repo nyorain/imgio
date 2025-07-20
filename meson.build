@@ -8,7 +8,7 @@ project('imgio', ['c', 'cpp'],
 )
 
 cc = meson.get_compiler('cpp')
-source_root = '/'.join(meson.source_root().split('\\'))
+source_root = '/'.join(meson.global_source_root().split('\\'))
 
 opt_png = get_option('png')
 
